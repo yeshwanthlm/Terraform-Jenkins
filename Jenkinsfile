@@ -1,7 +1,7 @@
 pipeline {
 
     parameters {
-        booleanParam(name: 'autoApprove', defaultValue: false, description: 'Automatically run apply after generating plan?')
+        booleanParam(name: 'autoApprove', defaultValue: false, description: 'Automatically run apply/destroy after generating plan?')
     } 
     environment {
         AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
@@ -45,7 +45,7 @@ pipeline {
 
         stage('Apply') {
             steps {
-                sh "pwd;cd terraform/ ; terraform apply -input=false tfplan"
+                sh "pwd;cd terraform/ ; terraform destroy -input=false tfplan"
             }
         }
     }
