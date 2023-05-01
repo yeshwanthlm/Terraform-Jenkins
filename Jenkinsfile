@@ -14,7 +14,7 @@ pipeline {
             steps {
                  script{
                         dir("terraform") {
-                            git "https://github.com/marcmael1/Terraform-Jenkins.git"
+                           checkout scmGit(branches: [[name: '*/dev']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/marcmael1/Terraform-Jenkins.git']])
                         }
                     }
                 }
