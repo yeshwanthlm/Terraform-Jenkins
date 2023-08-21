@@ -10,7 +10,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 script {
-                    git url: 'https://github.com/mail2diliprajput/Terraform-Jenkins.git'
+                    git url: 'https://github.com/mail2diliprajput/Terraform-Jenkins-01.git'
                 }
             }
         }
