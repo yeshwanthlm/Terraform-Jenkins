@@ -5,6 +5,7 @@ provider "aws" {
 resource "aws_instance" "foo" {
   ami           = "ami-097300c6222ac2b2a" # us-west-2
   instance_type = "t2.micro"
+  subnet_id     = "subnet-00529fad8ff2e503d"
   tags = {
       Name = "TF-Instance"
   }
