@@ -9,3 +9,17 @@ resource "aws_instance" "foo" {
       Name = "TF-Instance"
   }
 }
+resource "aws_s3_bucket" "example" {
+  bucket = "cpeibucket"
+
+  tags = {
+    Name        = "My bucket"
+    Environment = "Dev"
+  }
+}
+
+resource "aws_s3_bucket_object" "object" {
+  bucket = aws_s3_bucket.example.bucket
+  key    = "organizations-100.csv"
+  source = "./organizations-100.csv"
+}
