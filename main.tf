@@ -9,3 +9,11 @@ resource "aws_instance" "foo" {
       Name = "TF-Instance"
   }
 }
+
+terraform {
+  backend "s3" {
+    bucket = "iac-pipeline-backend"
+    key    = "first-pipeline"
+    region = "us-east-1"
+  }
+}
