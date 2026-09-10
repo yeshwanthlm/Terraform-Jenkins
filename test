@@ -1,0 +1,204 @@
+trigger:
+  - main
+
+variables:
+nodeVersion: '20.x'
+appName: 'hello-node-app'
+appDirectory: '/opt/hello-node-app'
+appPort: '3000'
+
+stages:
+
+* stage: Build
+  displayName: 'Build Node.js Application'
+
+  jobs:
+
+  * job: BuildJob
+    displayName: 'Build'
+
+    pool:
+    vmImage: 'ubuntu-latest'
+
+    steps:
+
+    * checkout: self
+
+    * task: NodeTool@0
+      displayName: 'Install Node.js'
+      inputs:
+      versionSpec: '$(nodeVersion)'
+
+    * script: |
+      set -e
+      node --version
+      npm --version
+      npm install
+      displayName: 'Install dependencies'
+
+    * script: |
+      set -e
+      npm run build
+      displayName: 'Run tests/build'
+
+    * task: PublishTestResults@2
+      displayName: 'Publish Test Results'
+      condition: succeededOrFailed()
+      inputs:
+      testResultsFiles: '**/TEST-RESULTS.xml'
+      testRunTitle: 'Node.js Tests'
+
+    * task: ArchiveFiles@2
+      displayName: 'Archive Application'
+      inputs:
+      rootFolderOrFile: '$(Build.SourcesDirectory)'
+      includeRootFolder: false
+      archiveType: 'tar'
+      tarCompression: 'gz'
+      archiveFile: '$(Build.ArtifactStagingDirectory)/$(appName).tar.gz'
+      replaceExistingArchive: true
+
+    * task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifact'
+      inputs:
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)/$(appName).tar.gz'
+      ArtifactName: 'drop'
+      publishLocation: 'Container'
+
+* stage: Deploy
+  displayName: 'Deploy to Ubuntu VM'
+  dependsOn: Build
+  condition: succeeded()
+
+  jobs:
+
+  * deployment: DeployWebApp
+    displayName: 'Deploy Node.js Application'
+
+    environment:
+    name: 'DeployWebApp-Server-Dev'
+    resourceType: 'virtualMachine'
+    resourceName: 'Deployment-Server'
+
+    strategy:
+    runOnce:
+    deploy:
+
+    ```
+      steps:
+
+        - download: current
+          artifact: drop
+
+        - script: |
+            set -e
+
+            echo "Updating packages..."
+            sudo apt-get update
+
+            echo "Installing Nginx..."
+            sudo apt-get install -y nginx curl
+
+            echo "Installing Node.js..."
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+
+            node --version
+            npm --version
+            nginx -v
+          displayName: 'Install Nginx and Node.js'
+
+        - script: |
+            set -e
+
+            echo "Creating application directory..."
+            sudo mkdir -p $(appDirectory)
+
+            echo "Extracting application..."
+            sudo tar -xzf "$(Pipeline.Workspace)/drop/$(appName).tar.gz" \
+              -C $(appDirectory)
+
+            echo "Installing production dependencies..."
+            cd $(appDirectory)
+            sudo npm install --omit=dev
+
+            sudo chown -R www-data:www-data $(appDirectory)
+
+            echo "Application deployed."
+          displayName: 'Deploy Application'
+
+        - script: |
+            set -e
+
+            echo "Creating systemd service..."
+
+            sudo tee /etc/systemd/system/hello-node-app.service > /dev/null <<'EOF'
+            [Unit]
+            Description=Hello Node.js Application
+            After=network.target
+
+            [Service]
+            Type=simple
+            User=www-data
+            WorkingDirectory=/opt/hello-node-app
+            Environment=PORT=3000
+            ExecStart=/usr/bin/node /opt/hello-node-app/server.js
+            Restart=always
+            RestartSec=5
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+
+            sudo systemctl daemon-reload
+            sudo systemctl enable hello-node-app
+            sudo systemctl restart hello-node-app
+
+            sleep 5
+
+            sudo systemctl --no-pager status hello-node-app
+
+            echo "Testing Node.js application..."
+            curl -f http://127.0.0.1:3000
+          displayName: 'Start Node.js Application'
+
+        - script: |
+            set -e
+
+            echo "Configuring Nginx..."
+
+            sudo tee /etc/nginx/sites-available/hello-node-app > /dev/null <<'EOF'
+            server {
+                listen 80;
+                listen [::]:80;
+
+                server_name _;
+
+                location / {
+                    proxy_pass http://127.0.0.1:3000;
+                    proxy_http_version 1.1;
+
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                }
+            }
+            EOF
+
+            sudo rm -f /etc/nginx/sites-enabled/default
+
+            sudo ln -sf \
+              /etc/nginx/sites-available/hello-node-app \
+              /etc/nginx/sites-enabled/hello-node-app
+
+            sudo nginx -t
+            sudo systemctl enable nginx
+            sudo systemctl restart nginx
+
+            echo "Testing Nginx..."
+            curl -f http://127.0.0.1
+
+            echo "Deployment successful!"
+          displayName: 'Configure Nginx'
+    ```
